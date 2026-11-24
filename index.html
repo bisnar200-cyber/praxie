@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Personal Show Watchlist &amp; Recommendation System: track the shows you watch, your watch history, ratings, characters, genres and recommendations.">
+<meta name="robots" content="index, follow">
+<meta property="og:title" content="Personal Show Watchlist &amp; Recommendation System">
+<meta property="og:description" content="Track shows, watch history, ratings and recommendations in one place.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%AC%3C/text%3E%3C/svg%3E">
+<title>Personal Show Watchlist & Recommendation System</title>
+<style>
+:root{--ink:#201d33;--bg:#fff;--leaf:#4b3fa0;--soil:#8a4f7d;--mist:#f0eefb;--line:#d6d2ec;--err:#fbeaea;--errl:#a33;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--ink:#ebe8fa;--bg:#15131f;--leaf:#6a5ccf;--soil:#b66ea5;--mist:#211e33;--line:#3a3556;--err:#3a1c1c;--errl:#e08080}}
+:root[data-theme="dark"]{--ink:#ebe8fa;--bg:#15131f;--leaf:#6a5ccf;--soil:#b66ea5;--mist:#211e33;--line:#3a3556;--err:#3a1c1c;--errl:#e08080}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;font:16px/1.5 Georgia,serif;color:var(--ink);background:var(--bg)}
+header{background:var(--leaf);color:#fff;padding:16px 18px}
+header h1{margin:0;font-size:1.2rem}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+nav{margin-top:8px;display:flex;gap:14px;flex-wrap:wrap}
+nav button{background:none;border:0;border-bottom:2px solid transparent;color:#e6e2fb;font:inherit;padding:2px 0;cursor:pointer;border-radius:0}
+nav button.on{border-color:#fff;color:#fff}
+main{max-width:1000px;margin:0 auto;padding:18px}
+h2{margin-top:0}
+.msg{background:var(--mist);border-left:4px solid var(--leaf);padding:8px 12px;margin-bottom:12px}
+.msg.err{background:var(--err);border-color:var(--errl)}
+form{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+.f{display:flex;flex-direction:column;font-size:.8rem;gap:2px}
+input,select,button{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+form button,button.sm{background:var(--leaf);color:#fff;border-color:var(--leaf);cursor:pointer}
+button.sm{padding:4px 10px;font-size:.85rem}
+header button.out{background:none;color:#fff;border-color:#fff;padding:3px 10px;cursor:pointer}
+.login{max-width:360px;margin:30px auto}
+.login form{flex-direction:column}
+.link{background:none;border:0;color:var(--leaf);text-decoration:underline;cursor:pointer;padding:0}
+.wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%}
+th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+td.nw{white-space:nowrap}
+th{background:var(--mist);white-space:nowrap}
+.note{font-size:.85rem;opacity:.8}
+h3{margin:18px 0 8px}
+</style></head><body>
+<header><div class="bar"><h1>Personal Show Watchlist & Recommendation System</h1><div id="who"></div></div><nav id="nav"></nav></header>
+<main><div id="msg"></div><div id="view">Loading…</div><p class="note">Data is saved in this browser on this device.</p></main>
+<script>
+var DB=null,user=null,tab='show',mode='login';
+var COLL={user:'users',show:'shows',genre:'genres',show_genre:'show_genre',watchlist:'watchlist',history:'watch_history',rec:'recommendations',character:'characters',accounts:'accounts'};
+var PK={user:'user_id',show:'show_id',genre:'genre_id',watchlist:'watchlist_id',history:'history_id',rec:'recommendation_id',character:'character_id'};
+var data={};Object.keys(COLL).forEach(function(k){data[k]=[]});
+var MEDIA=['Anime Series','Anime Movie','Animated Movie','Series','Movie'],STAT=['Plan to Watch','Watching','Completed','Dropped'],ROLE=['Lead','Supporting','Villain','Friend'];
+var TABS={show:'Shows',watchlist:'Watchlist',history:'Watch history',rec:'Recommendations',character:'Characters',genre:'Genres',user:'Users'};
+// field: [key,label,type,required,extra]  types: text, number, date, sel, enum
+var F={
+ show:[['title','Title','text',1],['release_year','Release year','number',1],['country','Country','text'],['media_type','Media type','enum',1,MEDIA],['description','Description','text']],
+ watchlist:[['user_id','User','sel',1,'user'],['show_id','Show','sel',1,'show'],['watch_status','Status','enum',1,STAT],['date_added','Date added','date',1,'today'],['rating','Rating (0–10, optional)','number',0,'rate']],
+ history:[['user_id','User','sel',1,'user'],['show_id','Show','sel',1,'show'],['watched_at','Watched on','date',1,'today'],['progress_percentage','Progress %','number',1,'pct'],['last_watched_episode','Last episode (e.g. S1E4)','text']],
+ rec:[['user_id','Recommended to','sel',1,'user'],['show_id','Show','sel',1,'show'],['reason','Reason','text',1],['recommendation_date','Date','date',1,'today']],
+ character:[['character_name','Character name','text',1],['role','Role','enum',1,ROLE],['show_id','Show','sel',1,'show']],
+ genre:[['genre_name','Genre name','text',1]],
+ user:[['username','Username','text',1],['email','Email','text']]
+};
+// column: [key,label,refKind]
+var C={
+ show:[['show_id','ID'],['title','Title'],['release_year','Year'],['country','Country'],['media_type','Type'],['_genres','Genres'],['description','Description']],
+ watchlist:[['watchlist_id','ID'],['user_id','User','user'],['show_id','Show','show'],['watch_status','Status'],['date_added','Added'],['rating','Rating']],
+ history:[['history_id','ID'],['user_id','User','user'],['show_id','Show','show'],['watched_at','Watched'],['progress_percentage','Progress'],['last_watched_episode','Last episode']],
+ rec:[['recommendation_id','ID'],['user_id','To','user'],['show_id','Show','show'],['reason','Reason'],['recommendation_date','Date']],
+ character:[['character_id','ID'],['character_name','Name'],['role','Role'],['show_id','Show','show']],
+ genre:[['genre_id','ID'],['genre_name','Name']],
+ user:[['user_id','ID'],['username','Username'],['email','Email']]
+};
+function esc(x){return String(x==null?'':x).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function val(id){return document.getElementById(id).value.trim()}
+function today(){return new Date().toISOString().slice(0,10)}
+function flash(t,err){document.getElementById('msg').innerHTML=t?'<div class="msg'+(err?' err':'')+'">'+esc(t)+'</div>':''}
+function nextId(k){return data[k].reduce(function(m,r){return Math.max(m,r[PK[k]]||0)},0)+1}
+function typing(){var a=document.activeElement&&document.activeElement.tagName;return a=='INPUT'||a=='SELECT'}
+async function sha(s){var b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('watchlist:'+s));return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,'0')}).join('')}
+async function put(k,id,obj){try{await DB.collection(COLL[k]).doc(String(id)).set(obj);return true}catch(e){flash('Could not save. You may need Contributor access to this page.',true);return false}}
+function subscribe(){Object.keys(COLL).forEach(function(k){
+  DB.collection(COLL[k]).onSnapshot(function(s){data[k]=s.docs.map(function(d){return d.data()});if(!typing())render()},function(){flash('Could not read the database.',true)})})}
+function nm(kind,id){
+  var r=data[kind].find(function(x){return x[PK[kind]]==id});if(!r)return '';
+  return kind=='user'?r.username:kind=='show'?r.title:r.genre_name}
+function nav(){
+  document.getElementById('nav').innerHTML=user?Object.keys(TABS).map(function(k){return '<button class="'+(k==tab?'on':'')+'" onclick="go(\''+k+'\')">'+TABS[k]+'</button>'}).join(''):'';
+  document.getElementById('who').innerHTML=user?esc(user)+' <button class="out" onclick="logout()">Log out</button>':''}
+function go(t){tab=t;flash('');render()}
+function logout(){user=null;try{sessionStorage.removeItem('wl_user')}catch(e){}flash('');render()}
+function setMode(m){mode=m;flash('');render()}
+function login(u){user=u;try{sessionStorage.setItem('wl_user',u)}catch(e){}}
+async function doLogin(e){e.preventDefault();var u=val('u').toLowerCase(),h=await sha(u+':'+document.getElementById('p').value);
+  var a=data.accounts.find(function(x){return x.username==u&&x.hash==h});
+  if(!a){flash('Wrong username or password.',true);return}login(u);flash('');render()}
+async function doRegister(e){e.preventDefault();var u=val('u').toLowerCase(),p=document.getElementById('p').value;
+  if(p.length<6){flash('Use a password with at least 6 characters.',true);return}
+  if(data.accounts.some(function(x){return x.username==u})){flash('That username is taken.',true);return}
+  var ok=await DB.collection(COLL.accounts).doc(u).set({username:u,hash:await sha(u+':'+p)}).then(function(){return true},function(){flash('Could not create the account.',true);return false});
+  if(ok){login(u);flash('Account created.');render()}}
+function field(f){
+  var id='f_'+f[0],req=f[3]?' required':'',h='<label class="f">'+esc(f[1]);
+  if(f[2]=='sel'){h+='<select id="'+id+'"'+req+'><option value="">Choose…</option>'+data[f[4]].map(function(r){return '<option value="'+r[PK[f[4]]]+'">'+esc(nm(f[4],r[PK[f[4]]]))+'</option>'}).join('')+'</select>'}
+  else if(f[2]=='enum'){h+='<select id="'+id+'"'+req+'>'+f[4].map(function(o){return '<option>'+o+'</option>'}).join('')+'</select>'}
+  else if(f[2]=='date'){h+='<input id="'+id+'" type="date" value="'+today()+'"'+req+'>'}
+  else if(f[2]=='number'){var mx=f[4]=='rate'?' max="10" step="0.1"':f[4]=='pct'?' max="100" step="0.01"':'';h+='<input id="'+id+'" type="number" min="0"'+mx+req+'>'}
+  else{h+='<input id="'+id+'"'+req+'>'}
+  return h+'</label>'}
+async function addRow(e){e.preventDefault();var o={},id=nextId(tab);o[PK[tab]]=id;
+  F[tab].forEach(function(f){var v=val('f_'+f[0]);
+    if(f[2]=='sel'||(f[2]=='number'&&v!==''))v=Number(v);o[f[0]]=v===''?null:v});
+  if(await put(tab,id,o)){flash('Saved.')}}
+async function addLink(e){e.preventDefault();var s=+val('ls'),g=+val('lg');
+  if(data.show_genre.some(function(x){return x.show_id==s&&x.genre_id==g})){flash('That show already has this genre.',true);return}
+  if(await DB.collection(COLL.show_genre).doc(s+'_'+g).set({show_id:s,genre_id:g}).then(function(){return true},function(){flash('Could not save.',true);return false}))flash('Genre added to show.')}
+async function sample(){
+  var G=['Adventure','Fantasy','Romance','Comedy','Family','Action','Sci-Fi'];
+  var S=[['Frieren: Beyond Journey\u2019s End',2023,'Japan','Anime Series','An elven mage explores the world after her party\u2019s hero dies.',[1,2]],
+   ['The Apothecary Diaries',2023,'Japan','Anime Series','A young woman solves mysteries in the imperial court.',[2]],
+   ['Your Name',2016,'Japan','Anime Movie','Two teens swap bodies across space and time.',[3,2]],
+   ['Encanto',2021,'USA','Animated Movie','Mirabel seeks her family\u2019s magic.',[5,2]],
+   ['Spirited Away',2001,'Japan','Anime Movie','Chihiro works in a magical bathhouse.',[1,2]],
+   ['Kung Fu Panda',2008,'USA','Animated Movie','A clumsy panda trains to become a kung fu hero.',[6,4]]];
+  try{for(var i=0;i<G.length;i++)await DB.collection(COLL.genre).doc(String(i+1)).set({genre_id:i+1,genre_name:G[i]});
+   for(var j=0;j<S.length;j++){var s=S[j];await DB.collection(COLL.show).doc(String(j+1)).set({show_id:j+1,title:s[0],release_year:s[1],country:s[2],media_type:s[3],description:s[4]});
+    for(var k=0;k<s[5].length;k++)await DB.collection(COLL.show_genre).doc((j+1)+'_'+s[5][k]).set({show_id:j+1,genre_id:s[5][k]})}
+   flash('Sample shows loaded.')}catch(e){flash('Could not save. You may need Contributor access to this page.',true)}}
+function cell(t,r,c){
+  if(c[0]=='_genres')return esc(data.show_genre.filter(function(x){return x.show_id==r.show_id}).map(function(x){return nm('genre',x.genre_id)}).join(', '));
+  if(c[2])return esc(nm(c[2],r[c[0]]));
+  if(c[0]=='progress_percentage'&&r[c[0]]!=null)return esc(r[c[0]])+'%';
+  return esc(r[c[0]])}
+function table(h,rows,empty){return '<div class="wrap"><table><tr>'+h.map(function(x){return '<th>'+x+'</th>'}).join('')+'</tr>'+(rows||'<tr><td colspan="'+h.length+'">'+empty+'</td></tr>')+'</table></div>'}
+function render(){
+  nav();var el=document.getElementById('view'),v='';
+  if(!DB){el.innerHTML='<p>This system needs a signed-in Claude session to reach its database. Sign in to Claude and reopen this page.</p>';return}
+  if(!user){var first=data.accounts.length==0,reg=first||mode=='register';
+    v='<div class="login"><h2>'+(reg?'Create account':'Log in')+'</h2>'+(first?'<p class="note">No accounts yet. Create the first one.</p>':'')+
+      '<form onsubmit="'+(reg?'doRegister':'doLogin')+'(event)"><input id="u" placeholder="Username" autocomplete="username" required><input id="p" type="password" placeholder="Password" autocomplete="current-password" required><button>'+(reg?'Create account':'Log in')+'</button></form>'+
+      (first?'':'<p class="note">'+(reg?'Have an account? <button class="link" onclick="setMode(\'login\')">Log in</button>':'New here? <button class="link" onclick="setMode(\'register\')">Create an account</button>')+'</p>')+'</div>';
+  } else {
+    var note='';
+    var need={watchlist:['user','show'],history:['user','show'],rec:['user','show'],character:['show']}[tab];
+    if(need&&need.some(function(k){return !data[k].length}))note='<div class="msg">Add '+need.map(function(k){return k=='user'?'a user':'a show'}).join(' and ')+' first (Users and Shows tabs).</div>';
+    var rows=data[tab].slice().sort(function(a,b){return a[PK[tab]]-b[PK[tab]]}).map(function(r){return '<tr>'+C[tab].map(function(c){return '<td'+(c[0]=='description'||c[0]=='reason'?'':' class="nw"')+'>'+cell(tab,r,c)+'</td>'}).join('')+'</tr>'}).join('');
+    v='<h2>'+TABS[tab]+'</h2>'+note+'<form onsubmit="addRow(event)">'+F[tab].map(field).join('')+'<button style="align-self:flex-end">Add</button></form>';
+    if(tab=='show'&&!data.show.length)v+='<p><button class="sm" onclick="sample()">Load sample shows</button> <span class="note">Adds 6 example shows and 7 genres.</span></p>';
+    v+=table(C[tab].map(function(c){return c[1]}),rows,'Nothing here yet. Add the first record above.');
+    if(tab=='genre'){
+      v+='<h3>Tag a show with a genre</h3><form onsubmit="addLink(event)"><label class="f">Show<select id="ls" required><option value="">Choose…</option>'+data.show.map(function(s){return '<option value="'+s.show_id+'">'+esc(s.title)+'</option>'}).join('')+'</select></label>'+
+       '<label class="f">Genre<select id="lg" required><option value="">Choose…</option>'+data.genre.map(function(g){return '<option value="'+g.genre_id+'">'+esc(g.genre_name)+'</option>'}).join('')+'</select></label><button style="align-self:flex-end">Add</button></form>'+
+       table(['Show','Genre'],data.show_genre.map(function(x){return '<tr><td>'+esc(nm('show',x.show_id))+'</td><td>'+esc(nm('genre',x.genre_id))+'</td></tr>'}).join(''),'No genre tags yet.');
+    }
+  }
+  if(el.dataset.last!==v){el.innerHTML=v;el.dataset.last=v}
+}
+function makeLocalDB(){
+  var KEY='watchlist_db_v1',store={},subs={};
+  try{store=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){store={}}
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(store))}catch(e){}}
+  function snap(n){var c=store[n]||{};return{docs:Object.keys(c).map(function(id){return{id:id,data:function(){return c[id]}}})}}
+  function emit(n){(subs[n]||[]).forEach(function(cb){cb(snap(n))})}
+  return{collection:function(n){return{
+    doc:function(id){return{set:function(obj){store[n]=store[n]||{};store[n][id]=obj;save();emit(n);return Promise.resolve()}}},
+    onSnapshot:function(cb){(subs[n]=subs[n]||[]).push(cb);setTimeout(function(){cb(snap(n))},0)}
+  }}}
+}
+(async function(){
+  try{user=sessionStorage.getItem('wl_user')}catch(e){}
+  DB=makeLocalDB();
+  if(DB)subscribe();render();
+})();
+</script></body></html>
